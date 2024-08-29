@@ -7,7 +7,6 @@ import pandas as pd
 from torch_geometric.loader import DataLoader
 from datasets import load_dataset
 
-from sklearn.cluster import KMeans
 from math import ceil
 import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import cosine_similarity
@@ -24,25 +23,22 @@ from util.model import GraphAutoencoder, extract_latent_representations, train_a
 from util.prompt import create_cot_prompt, create_incontext_prompt2, create_justcode_prompt, create_zeroshot_prompt1, create_zeroshot_prompt2, get_answer
 import pdb
 
-from torch_geometric.data import Data #, Daparse_querytaLoader
+from torch_geometric.data import Data, Batch
 from util.sql_tree import parse_query
 from rank_bm25 import BM25Okapi
-from sklearn.cluster import AgglomerativeClustering
 from nltk.tokenize import word_tokenize
 import string
 import time
 
+# Import the balanced contrastive similarity components
+from balanced_contrastive_similarity import balanced_contrastive_similarity, graph_based_clustering, GraphEncoder
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 def process_string_to_array(string):
     stripped_string = string.strip('[]')
     array = np.array([float(num) for num in stripped_string.split()])
     return array
-
-def cluster_data(df, n_clusters):
-    kmeans = KMeans(n_clusters=45)
-    labels_train = kmeans.fit_predict(list(df['data'].values))
-    return kmeans, labels_train
 
 def encode(self, batch, lang_model):
     x, edge_index, attention_mask = batch.x, batch.edge_index, batch.attention_mask
@@ -61,11 +57,40 @@ def get_samples(df, cluster, num):
     sampled_data = fdf.sample(n=num)
     return list(chain.from_iterable(zip(sampled_data['SMILES'], sampled_data['description'])))
 
-def get_samples_top(df, cluster, num, train_pool, test):
-    differences = cosine_similarity(train_pool, [test])
-    #pdb.set_trace()
-    x = np.argpartition(np.squeeze(differences), -num)[-num:]
-    sampled_data = df.iloc[x]
+def get_samples_top(df, num, model, train_graphs, test_graph, cluster_assignments):
+    model.eval()
+    with torch.no_grad():
+        train_batch = Batch.from_data_list(train_graphs)
+        test_batch = Batch.from_data_list([test_graph])
+        
+        train_embeddings = model(train_batch)
+        test_embedding = model(test_batch)
+
+        # Get the cluster of the test graph
+        test_cluster = graph_based_clustering([test_graph], len(set(cluster_assignments)))[0]
+
+        # Filter train_embeddings to only include graphs from the same cluster
+        cluster_mask = torch.tensor(cluster_assignments) == test_cluster
+        cluster_embeddings = train_embeddings[cluster_mask]
+
+        # For the first example (B), use the original method
+        similarities = F.cosine_similarity(test_embedding, train_embeddings)
+        first_index = torch.argmax(similarities)
+
+        # For the second example, use GraphContrastiveSimilarity within the cluster
+        cluster_similarities = F.cosine_similarity(test_embedding, cluster_embeddings)
+        second_index = torch.argmax(cluster_similarities)
+
+        # Convert the second index back to the original index in the full dataset
+        full_indices = torch.where(cluster_mask)[0]
+        second_index = full_indices[second_index]
+
+    # Ensure we don't select the same example twice
+    if first_index == second_index:
+        second_index = torch.argsort(similarities, descending=True)[1]
+
+    selected_indices = [first_index.item(), second_index.item()]
+    sampled_data = df.iloc[selected_indices]
     return list(chain.from_iterable(zip(sampled_data['SMILES'], sampled_data['description'])))
 
 def preprocess(text):
@@ -81,66 +106,23 @@ def get_samples_bm25(df, cluster, num, bm25, test):
     sampled_data = df.iloc[x]
     return list(chain.from_iterable(zip(sampled_data['query'], sampled_data['utterance'])))
 
-def find_optimal_clusters(data, max_k):
-    iters = range(2, max_k+1, 2)
-    sse = []
-    for k in iters:
-        kmeans = KMeans(n_clusters=k, random_state=42)
-        kmeans.fit(data)
-        sse.append(kmeans.inertia_)
-    
-    # Calculate the differences
-    differences = np.diff(sse)
-    acceleration = np.diff(differences)
-    k_optimal = iters[acceleration.argmax() + 1]
-    
-    return k_optimal
-
-def cluster(pooled):
-
-    all_pooled_numpy = pooled.cpu().numpy()
-    
-    # Find optimal number of clusters
-    max_k = min(20, len(all_pooled_numpy) // 2)  # Adjust max_k as needed
-    optimal_k = find_optimal_clusters(all_pooled_numpy, max_k)
-    print(f"Optimal number of clusters: {optimal_k}")
-    
-    # Perform K-means clustering with optimal k
-    kmeans = KMeans(n_clusters=optimal_k, random_state=42)
-    cluster_labels = kmeans.fit_predict(all_pooled_numpy)
-    
-    # Print cluster information
-    unique_labels, counts = np.unique(cluster_labels, return_counts=True)
-    print("Number of clusters:", len(unique_labels))
-    print("Cluster sizes:", counts)
-    
-    return kmeans, cluster_labels
-
 def run_transformer(args, prompts1, references, start_time):
     data_dict = {
-        'prompt1': np.squeeze(prompts1),      # First array as the 'ID' column
-        'ref': references      # Third array as the 'Age' column
+        'prompt1': np.squeeze(prompts1),
+        'ref': references
     }
     end_time = time.time()
     time_prompt = end_time - start_time
-
-
 
     df = pd.DataFrame(data_dict)
 
     if args.limit > 0:
         df = df[0:args.limit]
         references = references[0:args.limit]
-        
 
     prompts_all = df['prompt1'].to_numpy().flatten()
     if (args.lang_model == "openai/chatgptxxxx"):
-        #if args.limit:
-        #   df = df[0:10]
-        #   prompts_all = df['prompt1'].to_numpy().flatten()
-        #   references = references[0:10]
         client = OpenAI(
-            # defaults to os.environ.get("OPENAI_API_KEY")
             api_key="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",
         )   
         def get_response_zero(prompt):
@@ -169,7 +151,6 @@ def run_transformer(args, prompts1, references, start_time):
             )
             return response.choices[0].message.content
 
-
         responses = []
         for prompt in prompts_all:
             if (args.method == "zero-gpt"):
@@ -181,13 +162,11 @@ def run_transformer(args, prompts1, references, start_time):
         df = pd.DataFrame(responses)
         df.to_csv(f"./output/{args.dataset}-{args.lang_model.split('/')[1]}-{args.method}-{args.num_examples}.csv", index=False)
     else:
-        run_prompts(args.lang_model, prompts_all, f"./output/{args.dataset}-{args.lang_model.split('/')[1]}-{args.method}-{args.num_examples}.csv") #args.output_csv)
+        run_prompts(args.lang_model, prompts_all, f"./output/{args.dataset}-{args.lang_model.split('/')[1]}-{args.method}-{args.num_examples}.csv")
         df.to_csv(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}.csv", index=False)
     print(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}.csv")
     measure(args, time_prompt, references)
 
-# MEASURE SENTENCE TRANSFORMER
-# Load a pre-trained paraphrase identification model
 def measure(args, time_prompt, references):
     st_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
@@ -206,7 +185,6 @@ def measure(args, time_prompt, references):
     bleu_metric = evaluate.load("bleu")
     bleu1 = bleu_metric.compute(predictions=res, references=references)
     bleu2 = bleu_metric.compute(predictions=res, references=references, max_order=2)
-    
 
     file_path = 'EXPERIMENTS.txt'
     with open(file_path, 'a') as file:
@@ -222,6 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--limit', type=int, default=-1) 
     parser.add_argument('--epochs', type=int, default=1) 
     parser.add_argument('--input_csv', type=int, default=0)
+    parser.add_argument('--n_clusters', type=int, default=5)
     
     args = parser.parse_args()
 
@@ -232,7 +211,6 @@ if __name__ == '__main__':
         ref = df['ref'].values
         run_transformer(args, prompts, ref, 0)
     else:
-
         dataset_name = args.dataset
         if (args.dataset == "chebi"):
             dataset_name = 'liupf/ChEBI-20-MM'
@@ -244,30 +222,48 @@ if __name__ == '__main__':
 
         time_gnn = 0
         if (args.method == "icl"):
-            train_graphs = df_train['SMILES'].apply(smiles2graph)
+            train_graphs = [smiles2graph(smiles) for smiles in df_train['SMILES']]
             train_loader = DataLoader(train_graphs, batch_size=16, shuffle=False)
 
-            val_graphs = df_valid['SMILES'].apply(smiles2graph)
+            val_graphs = [smiles2graph(smiles) for smiles in df_valid['SMILES']]
             val_loader = DataLoader(val_graphs, batch_size=16, shuffle=False)
 
-            test_graphs = df_test['SMILES'].apply(smiles2graph)
+            test_graphs = [smiles2graph(smiles) for smiles in df_test['SMILES']]
             test_loader = DataLoader(test_graphs, batch_size=16, shuffle=False)
 
-            model = GraphAutoencoder(input_dim=9, hidden_dim=16, latent_dim=8)
+            # Initialize and train the GraphAutoencoder model
+            input_dim = 9  # From the smiles2graph function output
+            hidden_dim = 32
+            embedding_dim = 16
+            autoencoder = GraphAutoencoder(input_dim, hidden_dim, embedding_dim).to(device)
 
             start_time = time.time()
-            #model = GCN(input_dim, hidden_dim, output_dim)
-            model = GraphAutoencoder(input_dim=9, hidden_dim=16, latent_dim=8)
+            train_autoencoder(autoencoder, train_loader, val_loader, epochs=args.epochs)
+            
+            # Extract latent representations
+            train_embeddings = extract_latent_representations(autoencoder, train_loader)
+            
+            # Perform balanced contrastive clustering
+            cluster_assignments = graph_based_clustering(train_graphs, args.n_clusters)
+            
+            # Initialize the GraphEncoder for contrastive similarity
+            graph_encoder = GraphEncoder(input_dim, hidden_dim, embedding_dim).to(device)
+            
+            # Train the GraphEncoder using balanced contrastive similarity
+            optimizer = torch.optim.Adam(graph_encoder.parameters(), lr=0.001)
+            for epoch in range(args.epochs):
+                graph_encoder.train()
+                total_loss = 0
+                for batch in train_loader:
+                    batch = batch.to(device)
+                    optimizer.zero_grad()
+                    embeddings = graph_encoder(batch)
+                    loss = balanced_contrastive_similarity(embeddings, [g.to(device) for g in train_graphs], n_clusters=args.n_clusters)
+                    loss.backward()
+                    optimizer.step()
+                    total_loss += loss.item()
+                print(f"Epoch {epoch+1}/{args.epochs}, Loss: {total_loss/len(train_loader):.4f}")
 
-            train_autoencoder(model, train_loader, val_loader, epochs=args.epochs)
-            train_pool = extract_latent_representations(model, train_loader)
-            test_pool  = extract_latent_representations(model, test_loader)
-            kmeans, train_labels = cluster(train_pool)
-            #pdb.set_trace()
-            #kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(train_pool)
-            #df_train['label'] = kmeans.labels_
-            test_pool_np = test_pool.cpu().numpy()
-            test_labels = kmeans.predict(test_pool_np)
             end_time = time.time()
             time_gnn = end_time - start_time
 
@@ -280,16 +276,11 @@ if __name__ == '__main__':
         for i in range(0, len(df_test)):
             prog = df_test.iloc[i]['SMILES']
             
-            #print(prog, df_test.iloc[i]['utterance'])
             if(args.method == "random"):
                 p_args1 = get_samples(df_train, -1, args.num_examples) + [prog]
                 prompt1 = create_incontext_prompt2(*p_args1)
-            #elif(args.method=="BM25"):
-            #    p_args1 = get_samples_bm25(df_train, -1, args.num_examples, bm25, prog) + [prog]
-            #    prompt1 = create_incontext_prompt2(*p_args1)
             elif(args.method=="icl"):
-                #    cluster = test_pool_clusters[i]
-                p_args1 = get_samples_top(df_train, None, args.num_examples, train_pool, test_pool[i]) + [prog]
+                p_args1 = get_samples_top(df_train, args.num_examples, graph_encoder, train_graphs, test_graphs[i], cluster_assignments) + [prog]
                 prompt1 = create_incontext_prompt2(*p_args1)
             elif(args.method=="zero1"):
                 p_args2 = (prog,)
@@ -302,11 +293,6 @@ if __name__ == '__main__':
                 prompt1 = create_cot_prompt(*p_args2)
             elif(args.method=="zero-gpt"):
                 prompt1 = prog
-            #else:
-            #    cluster = test_pool_clusters[i]
-            #    p_args1 = get_samples(df_train, cluster, args.num_examples) + [prog]
-            #    prompt1 = create_incontext_prompt2(*p_args1)
-
 
             prompts1.append(prompt1)
             references.append(df_test.iloc[i]['description'])
