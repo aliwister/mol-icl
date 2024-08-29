@@ -1,0 +1,15 @@
+# mol-icl
+.conda
+.conda/**
+.ipynb_checkpoints
+.ipynb_checkpoints/**
+notebooks/data
+notebooks/data/**
+notebooks/datasets
+notebooks/datasets/**
+**/__pycache__
+**/__pycache__/**
+spinningup
+spinningup/**
+GraphMAE/
+VGAE_pyG/
