@@ -184,11 +184,11 @@ def run_transformer(args, prompts1, references, start_time):
         run_prompts(args.lang_model, prompts_all, f"./output/{args.dataset}-{args.lang_model.split('/')[1]}-{args.method}-{args.num_examples}.csv") #args.output_csv)
         df.to_csv(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}.csv", index=False)
     print(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}.csv")
-    measure(args, time_prompt)
+    measure(args, time_prompt, references)
 
 # MEASURE SENTENCE TRANSFORMER
 # Load a pre-trained paraphrase identification model
-def measure(args, time_prompt):
+def measure(args, time_prompt, references):
     st_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
     df = pd.read_csv(f"./output/{args.dataset}-{args.lang_model.split('/')[1]}-{args.method}-{args.num_examples}.csv")
