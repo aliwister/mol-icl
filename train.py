@@ -80,6 +80,7 @@ if __name__ == '__main__':
     parser.add_argument('--input_csv', type=str, default=None)
     parser.add_argument('--n_clusters', type=int, default=5)
     parser.add_argument('--encoder_type', type=str, default='GraphAutoencoder')
+    parser.add_argument('--gpus', type=int, default='1')
     
     args = parser.parse_args()
     print(f"Starting: method: {args.method}, limit: {args.limit}, epochs: {args.epochs}")
@@ -109,12 +110,9 @@ if __name__ == '__main__':
         if(args.method[0:3] == "icl"):
             icl = ICL(df_train, df_valid, df_test, args)
 
-        if (args.limit > 0):
-            df_test_limited = df_test[:args.limit]
-        else:
-            df_test_limited = df_test
 
-        for i in range(0, len(df_test_limited)):
+
+        for i in range(0, len(df_test)):
             prog = df_test.iloc[i]['SMILES']
             
             if(args.method == "random"):
@@ -140,7 +138,7 @@ if __name__ == '__main__':
 
             prompts1.append(prompt1)
             references.append(df_test.iloc[i]['description'])
-        
+
         data_dict = {
             'prompt1': np.squeeze(prompts1),
             'ref': references
@@ -150,5 +148,8 @@ if __name__ == '__main__':
         print("Prompt Selection time:", time_prompt)
         df = pd.DataFrame(data_dict)
 
-        df.to_csv(f"./input/{args.dataset}-{args.method}-{args.num_examples}-limit{args.limit}-epochs{args.epochs}.csv", index=False)
-        run_transformer(args, df, time_prompt)
+        if (args.limit > 0):
+            df = df[:args.limit]
+
+        df.to_csv(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}-epochs{args.epochs}.csv", index=False)
+        #run_transformer(args, df, time_prompt)

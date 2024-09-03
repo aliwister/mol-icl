@@ -6,10 +6,12 @@ from torch_geometric.data import Data, Batch
 from util.sql_tree import parse_query
 from torch_geometric.loader import DataLoader
 import torch
+import lightning as L
 import torch.nn.functional as F
 from itertools import chain
 import time
 import pdb
+import random
 
 class ICL:
     def __init__(self, df_train, df_valid, df_test, args):
@@ -30,6 +32,10 @@ class ICL:
 
         self._initialize_and_train_model()
 
+        if(args.method == "icl-new"):
+            self.model = self._train_icl_new(args.limit)
+    
+
     def _initialize_and_train_model(self):
         input_dim = 9  # From the smiles2graph function output
         hidden_dim = 32
@@ -46,6 +52,40 @@ class ICL:
 
         end_time = time.time()
         self.time_gnn = end_time - start_time
+
+    def _train_icl_new(self, limit, devices=1):
+        if (limit > 0):
+            df_test_limited = self.df_test[:limit]
+        else:
+            df_test_limited = self.df_test
+
+        training_set = []
+        for i in range(0, len(df_test_limited)):
+            a = i
+            b = self.get_ae_samples(a, 1)[0]
+
+            test_cluster = self.test_labels[a]
+
+            # Filter train_embeddings to only include graphs from the same cluster
+            cluster_mask = self.cluster_assignments == test_cluster
+            examples = [self.train_graphs[i] for i in range(len(self.train_graphs)) if cluster_mask[i]]
+            for i in range(20):
+                training_set.append((self.test_graphs[a], self.train_graphs[b], random.sample(examples,1)[0]))
+
+        # Create train_loader from training_set
+        def collate_fn(batch):
+            test_graphs, train_graphs, example = zip(*batch)
+            return Batch.from_data_list(test_graphs), Batch.from_data_list(train_graphs), Batch.from_data_list(example)
+
+        train_loader = DataLoader(training_set, batch_size=32, shuffle=True, collate_fn=collate_fn)
+        
+        model = GraphContrastiveSimilarity()
+        trainer = L.Trainer(
+            max_epochs=100,
+            devices=devices
+        )
+        trainer.fit(model, train_loader)
+        return model
     
     def get_samples(self, test_index, num):
         idxs = self.get_ae_samples(test_index, num)
@@ -53,7 +93,6 @@ class ICL:
         return list(chain.from_iterable(zip(sampled_data['SMILES'], sampled_data['description'])))
 
     def get_samples_new(self, test_index, num):
-        print(test_index)
         idx1 = self.get_ae_samples(test_index, 1)
         idx2 = self.get_samples_sim_A_diff_B(test_index, idx1[0])
         sampled_data = self.df_train.iloc[idx1 + [idx2.item()]]
@@ -65,7 +104,6 @@ class ICL:
 
         # Filter train_embeddings to only include graphs from the same cluster
         cluster_mask = self.cluster_assignments == test_cluster
-        cluster_embeddings = self.train_embeddings[cluster_mask]
 
         # For the first example (B), use cosine similarity
         similarities = F.cosine_similarity(test_embedding.unsqueeze(0), self.train_embeddings)
@@ -77,16 +115,6 @@ class ICL:
 
         # Filter train_embeddings to only include graphs from the same cluster
         cluster_mask = self.cluster_assignments == test_cluster
-
-        # For the second example, use GraphContrastiveSimilarity within the cluster
-        model = GraphContrastiveSimilarity(9, 32, 9).to(self.device)
-        
-        B = self.train_embeddings[b]
         examples = [self.train_graphs[i] for i in range(len(self.train_graphs)) if cluster_mask[i]]
-            
-        # Train the model
-        model = train_model(model, examples, cluster_mask, self.test_graphs[a], self.train_graphs[b], 50, 4, self.device)
-        similar_to_A_different_from_B = find_similar_to_A_different_from_B(model, self.test_graphs[a], self.train_graphs[b], examples, self.device, 1)
-
+        similar_to_A_different_from_B = find_similar_to_A_different_from_B(self.model, self.test_graphs[a], self.train_graphs[b], examples, 1)
         return similar_to_A_different_from_B
-

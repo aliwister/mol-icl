@@ -12,7 +12,7 @@ def measure(args, output_file, time_prompt, references):
     df = pd.read_csv(output_file)
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     res = np.squeeze(df.values)
-    pdb.set_trace()
+
     emb_res = st_model.encode(res, convert_to_tensor=True)
     emb_ref = st_model.encode(references, convert_to_tensor=True)
     score1 = F.cosine_similarity(emb_res, emb_ref, dim=1).mean().item()
