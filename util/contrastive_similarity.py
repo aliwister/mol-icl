@@ -26,12 +26,12 @@ def contrastive_loss(anchor, positive, negative, margin=1.0):
     loss = torch.mean(torch.clamp(distance_positive - distance_negative + margin, min=0))
     return loss
 
-def find_similar_to_A_different_from_B(model, A, B, examples, top_k=5):
+def find_similar_to_A_different_from_B(model, A, B, examples, device, top_k=5):
     model.eval()
     with torch.no_grad():
-        A_embedding = model(Batch.from_data_list([A]))
-        B_embedding = model(Batch.from_data_list([B]))
-        examples_embedding = model(Batch.from_data_list(examples))
+        A_embedding = model(Batch.from_data_list([A]).to(device))
+        B_embedding = model(Batch.from_data_list([B]).to(device))
+        examples_embedding = model(Batch.from_data_list(examples).to(device))
 
         similarity_to_A = torch.sum((examples_embedding - A_embedding) ** 2, dim=1)
         similarity_to_B = torch.sum((examples_embedding - B_embedding) ** 2, dim=1)
@@ -52,42 +52,27 @@ def load_chebi_dataset(num_examples):
     graphs = [smiles2graph(smiles) for smiles in df_train['SMILES']]
     return graphs, df_train['description'].tolist()
 
-def main():
-    # Hyperparameters
-    input_dim = 9  # From the smiles2graph function output
-    hidden_dim = 32
-    embedding_dim = 16
-    num_examples = 1000
-    num_epochs = 100
+def train_model(model, examples, mask, A, B, num_epochs, batch_size, device):
     learning_rate = 0.001
-    batch_size = 32
-
-    # Load ChEBI dataset
-    examples, descriptions = load_chebi_dataset(num_examples)
-    A, B = examples[0], examples[1]  # Use the first two molecules as A and B
-
-    # Initialize model and optimizer
-    model = GraphContrastiveSimilarity(input_dim, hidden_dim, embedding_dim)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-    # Training loop
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
 
-        for _ in range(num_examples // batch_size):
+        for _ in range(len(examples) // batch_size):
             optimizer.zero_grad()
 
-            # Sample a batch of examples
-            batch_indices = random.sample(range(len(examples)), batch_size)
-            batch = [examples[i] for i in batch_indices]
+            # Sample a batch of examples according to the mask
+            batch = random.sample(examples, batch_size)
+            #batch = [examples[i] for i in batch_indices]
 
             # Forward pass
             batch_data = Batch.from_data_list(batch)
+            batch_data = batch_data.to(device)
             batch_embeddings = model(batch_data)
 
-            A_embedding = model(Batch.from_data_list([A]))
-            B_embedding = model(Batch.from_data_list([B]))
+            A_embedding = model(Batch.from_data_list([A]).to(device))
+            B_embedding = model(Batch.from_data_list([B]).to(device))
 
             # Compute loss
             anchor = A_embedding.repeat(batch_size, 1)
@@ -101,22 +86,8 @@ def main():
 
             total_loss += loss.item()
 
-        avg_loss = total_loss / (num_examples // batch_size)
+        avg_loss = total_loss / (len(examples) // batch_size)
         if (epoch + 1) % 10 == 0:
             print(f"Epoch [{epoch+1}/{num_epochs}], Avg Loss: {avg_loss:.4f}")
 
-    # Find examples similar to A and different from B
-    similar_to_A_different_from_B = find_similar_to_A_different_from_B(model, A, B, examples)
-
-    print("A: ", descriptions[0])
-    print("B: ", descriptions[1])
-
-    print("\nIndices of examples most similar to A and most different from B:")
-    print(similar_to_A_different_from_B)
-
-    print("\nDescriptions of selected molecules:")
-    for idx in similar_to_A_different_from_B:
-        print(descriptions[idx])
-
-if __name__ == "__main__":
-    main()
+    return model

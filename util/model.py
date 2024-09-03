@@ -29,14 +29,14 @@ class GraphAutoencoder(torch.nn.Module):
         x_hat = self.decode(z, edge_index)
         return x_hat, z, agg
 
-def train_autoencoder(model, train_loader, val_loader, epochs, lr=0.01):
+def train_autoencoder(model, train_loader, val_loader, epochs, lr=0.01, device='cpu'):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     model.train()
     for epoch in range(epochs):
         total_loss = 0
         for batch in train_loader:
             optimizer.zero_grad()
-            x_hat, z, _ = model(batch)
+            x_hat, z, _ = model(batch.to(device))
             loss = F.mse_loss(x_hat, batch.x)  # Reconstruction loss
             loss.backward()
             optimizer.step()
@@ -49,7 +49,7 @@ def train_autoencoder(model, train_loader, val_loader, epochs, lr=0.01):
         total_val_loss = 0
         with torch.no_grad():
             for batch in val_loader:
-                x_hat, z, _ = model(batch)
+                x_hat, z, _ = model(batch.to(device))
                 loss = F.mse_loss(x_hat, batch.x)  # Reconstruction loss
                 total_val_loss += loss.item()
         
@@ -57,24 +57,24 @@ def train_autoencoder(model, train_loader, val_loader, epochs, lr=0.01):
         
         print(f'Epoch {epoch+1}, Train Loss: {avg_loss:.4f}, Validation Loss: {avg_val_loss:.4f}')
 import pdb
-def extract_latent_representations(model, loader):
+def extract_latent_representations(model, loader, device):
     model.eval()  # Set the model to evaluation mode
     latent_representations = []
     #pdb.set_trace()
     with torch.no_grad():
         for batch in loader:
-            _, _, agg = model(batch)  # Get the latent representations
+            _, _, agg = model(batch.to(device)) # Get the latent representations
             latent_representations.append(agg)
     
     latent_representations = torch.cat(latent_representations, dim=0)
     return latent_representations
 
-def extract_latent_representation(model, data):
+def extract_latent_representation(model, data, device):
     model.eval()  # Set the model to evaluation mode
     latent_representations = []
     #pdb.set_trace()
     with torch.no_grad():
-        _, _, agg = model(data)  # Get the latent representations
+        _, _, agg = model(data.to(device))  # Get the latent representations
         latent_representations.append(agg)
     
     #latent_representations = torch.cat(latent_representations[0], dim=0)

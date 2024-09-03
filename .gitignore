@@ -13,3 +13,15 @@ spinningup
 spinningup/**
 GraphMAE/
 VGAE_pyG/
+*.out
+lightning_logs
+lightning_logs/**
+input
+output
+input/**
+output/**
+*.sh
+data
+data/** 
+Equal-Size-Spectral-Clustering/
+Equal-Size-Spectral-Clustering/**

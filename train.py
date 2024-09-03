@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
+import lightning as L
 
 from itertools import chain
 from argparse import ArgumentParser
@@ -17,9 +18,8 @@ from run_prompts import run_prompts
 from util.balanced_kmeans import balanced_kmeans
 from util.icl import ICL
 from util.measure import measure
-from util.model import GraphAutoencoder, extract_latent_representations, train_autoencoder
+from util.model import GraphAutoencoder, extract_latent_representations
 from util.prompt import create_cot_prompt, create_incontext_prompt2, create_justcode_prompt, create_zeroshot_prompt1, create_zeroshot_prompt2, get_answer
-import pdb
 
 from torch_geometric.data import Data, Batch
 from util.sql_tree import parse_query
@@ -53,14 +53,7 @@ def get_samples(df, cluster, num):
     sampled_data = fdf.sample(n=num)
     return list(chain.from_iterable(zip(sampled_data['SMILES'], sampled_data['description'])))
 
-
 def run_transformer(args, df, time_prompt):
-
-    # Remove examples where prompt1 is longer than 2045 characters
-    #df['prompt_length'] = df['prompt1'].str.split().str.len()
-    #df = df[df['prompt_length'] <= 2000]
-    #df = df.drop('prompt_length', axis=1)
-
     if args.limit > 0:
         df = df[0:args.limit]
 
@@ -73,9 +66,7 @@ def run_transformer(args, df, time_prompt):
     else:
         run_prompts(args.model_name, prompts_all, output_file)
         
-    #print(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}.csv")
     measure(args, output_file, time_prompt, references)
-
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -94,7 +85,6 @@ if __name__ == '__main__':
     print(f"Starting: method: {args.method}, limit: {args.limit}, epochs: {args.epochs}")
     if(args.input_csv):
         print("Manual Input CSV")
-        #pdb.set_trace()
         df = pd.read_csv(args.input_csv)
         prompts = df['prompt1'].values
         ref = df['ref'].values
@@ -131,10 +121,10 @@ if __name__ == '__main__':
                 p_args1 = get_samples(df_train, -1, args.num_examples) + [prog]
                 prompt1 = create_incontext_prompt2(*p_args1)
             elif(args.method=="icl"):
-                p_args1 = icl.get_samples(args.num_examples, i) + [prog]
+                p_args1 = icl.get_samples(i, args.num_examples) + [prog]
                 prompt1 = create_incontext_prompt2(*p_args1)
             elif(args.method=="icl-new"):
-                p_args1 = icl.get_samples_new(args.num_examples, i) + [prog]
+                p_args1 = icl.get_samples_new(i, args.num_examples) + [prog]
                 prompt1 = create_incontext_prompt2(*p_args1)
             elif(args.method=="zero1"):
                 p_args2 = (prog,)
@@ -157,7 +147,7 @@ if __name__ == '__main__':
         }
         end_time = time.time()
         time_prompt = end_time - start_time
-        print("Prompt Selection time = time_prompt")
+        print("Prompt Selection time:", time_prompt)
         df = pd.DataFrame(data_dict)
 
         df.to_csv(f"./input/{args.dataset}-{args.method}-{args.num_examples}-limit{args.limit}-epochs{args.epochs}.csv", index=False)
