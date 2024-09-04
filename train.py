@@ -1,40 +1,17 @@
 import numpy as np
 import pandas as pd
 import torch
-import lightning as L
-
+import time
 from itertools import chain
 from argparse import ArgumentParser
-
-from torch_geometric.loader import DataLoader
 from datasets import load_dataset
 
-from math import ceil
-
-from util.chatgpt import run_chatgpt
-from util.contrastive_similarity import GraphContrastiveSimilarity, find_similar_to_A_different_from_B, train_model
+#from util.chatgpt import run_chatgpt
 from run_prompts import run_prompts
-
 from util.balanced_kmeans import balanced_kmeans
 from util.icl import ICL
 from util.measure import measure
-from util.model import GraphAutoencoder, extract_latent_representations
 from util.prompt import create_cot_prompt, create_incontext_prompt2, create_justcode_prompt, create_zeroshot_prompt1, create_zeroshot_prompt2, get_answer
-
-from torch_geometric.data import Data, Batch
-from util.sql_tree import parse_query
-
-import time
-
-# Import the balanced contrastive similarity components
-from balanced_contrastive_similarity import balanced_contrastive_similarity, graph_based_clustering, GraphEncoder
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-def process_string_to_array(string):
-    stripped_string = string.strip('[]')
-    array = np.array([float(num) for num in stripped_string.split()])
-    return array
 
 def encode(self, batch, lang_model):
     x, edge_index, attention_mask = batch.x, batch.edge_index, batch.attention_mask
@@ -62,7 +39,8 @@ def run_transformer(args, df, time_prompt):
 
     output_file = f"./output/{args.dataset}-{args.model_name}-{args.method}-{args.num_examples}.csv"
     if (args.model_name == "openai/chatgptxxxx"):
-        run_chatgpt(args.langmodel_name_model, prompts_all, output_file)
+        #run_chatgpt(args.langmodel_name_model, prompts_all, output_file)
+        exit(-1)
     else:
         run_prompts(args.model_name, prompts_all, output_file)
         
@@ -75,12 +53,12 @@ if __name__ == '__main__':
     parser.add_argument('--method', type=str, default="icl-new")
     parser.add_argument('--output_csv', type=str, default='/home/ali.lawati/gnn-incontext/cosql_processed2.csv.gptj.incontext')
     parser.add_argument('--model_name', type=str, default="gemma-7b") 
-    parser.add_argument('--limit', type=int, default=-1) 
+    parser.add_argument('--limit', type=int, default=100) 
     parser.add_argument('--epochs', type=int, default=1) 
     parser.add_argument('--input_csv', type=str, default=None)
     parser.add_argument('--n_clusters', type=int, default=5)
     parser.add_argument('--encoder_type', type=str, default='GraphAutoencoder')
-    parser.add_argument('--gpus', type=int, default='1')
+    parser.add_argument('--gpus', type=int, default='3')
     
     args = parser.parse_args()
     print(f"Starting: method: {args.method}, limit: {args.limit}, epochs: {args.epochs}")
@@ -109,8 +87,6 @@ if __name__ == '__main__':
         start_time = time.time()
         if(args.method[0:3] == "icl"):
             icl = ICL(df_train, df_valid, df_test, args)
-
-
 
         for i in range(0, len(df_test)):
             prog = df_test.iloc[i]['SMILES']
@@ -151,5 +127,5 @@ if __name__ == '__main__':
         if (args.limit > 0):
             df = df[:args.limit]
 
-        df.to_csv(f"./input/{args.dataset}-{args.method}-{args.num_examples}-{args.limit}-epochs{args.epochs}.csv", index=False)
-        #run_transformer(args, df, time_prompt)
+        df.to_csv(f"./input/GCL-{args.dataset}-{args.method}-{args.num_examples}-{args.limit}-epochs{args.epochs}.csv", index=False)
+        run_transformer(args, df, time_prompt)
