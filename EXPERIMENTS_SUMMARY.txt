@@ -56,3 +56,4 @@
 ./output/chebi-gemma-7B-icl-new-sep-2.csv, tokens/sec: 2.0, time 9488.130328893661, total tokens 25912, total prompts 100
 ./output/chebi-mistral-7B-icl-new-sep-2.csv, tokens/sec: 68.0, time 351.3522882461548, total tokens 24123, total prompts 100
 ./output/chebi-zephy7B-icl-new-sep-2.csv, tokens/sec: 65.0, time 367.4214560985565, total tokens 24171, total prompts 100
+./output/chebi-gemma-7B-icl-2.csv, tokens/sec: 67.0, time 3866.7160720825195, total tokens 260852, total prompts 1000

@@ -48,7 +48,7 @@ def run_transformer(args, df, time_prompt):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--dataset', type=str, default="liupf/ChEBI-20-MM") 
+    parser.add_argument('--dataset', type=str, default="chebi") # default="liupf/ChEBI-20-MM") 
     parser.add_argument('--num_examples', type=int, default=2)
     parser.add_argument('--method', type=str, default="icl-new")
     parser.add_argument('--output_csv', type=str, default='/home/ali.lawati/gnn-incontext/cosql_processed2.csv.gptj.incontext')
@@ -126,6 +126,10 @@ if __name__ == '__main__':
 
         if (args.limit > 0):
             df = df[:args.limit]
-
         df.to_csv(f"./input/GCL-{args.dataset}-{args.method}-{args.num_examples}-{args.limit}-epochs{args.epochs}.csv", index=False)
-        run_transformer(args, df, time_prompt)
+
+        if(args.method[0:3] == "icl"):
+            del icl
+            torch.cuda.empty_cache()
+
+        #run_transformer(args, df, time_prompt)

@@ -32,8 +32,8 @@ models = {
 
 # Function to generate text
 # Function to generate text
-def generate_text(model, tokenizer, max_tokens, prompt, device):
-        prompt_tokenized=tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_tokens).to(device)
+def generate_text(model, tokenizer, max_tokens, prompt):
+        prompt_tokenized=tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_tokens)
         outputs = model.generate(
             **prompt_tokenized, 
             #max_length=100,         # Limit the length of the output
@@ -95,9 +95,9 @@ def generate_text_pipeline(model, tokenizer, max_tokens, messages, device):
         "time_taken": time_taken
     }
 
-def load_model(model_name, model_config, device):
+def load_model(model_name, model_config):
     model = AutoModelForCausalLM.from_pretrained(model_config[0], device_map="auto")
-    tokenizer = AutoTokenizer.from_pretrained(model_config[0])
+    tokenizer = AutoTokenizer.from_pretrained(model_config[0], device_map="auto")
     tokenizer.pad_token = tokenizer.eos_token
 
     #model.to(device)
@@ -106,52 +106,28 @@ def load_model(model_name, model_config, device):
 
 def run_prompts(model_name, prompts_all, output_csv): 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
+    #print(device)
     
     accelerator = Accelerator()
     print(accelerator.device)
-    # 10*10 Prompts. Source: https://www.penguin.co.uk/articles/2022/04/best-first-lines-in-books
-    # load a base model and tokenizer
-    """    if (lang_model == "EleutherAI/gpt-j-6b"):
-        
-            model_path = lang_model
-            tokenizer = AutoTokenizer.from_pretrained(model_path)   
-            tokenizer.pad_token = tokenizer.eos_token
-            model = GPTJForCausalLM.from_pretrained(
-                model_path,    
-                #device_map={"": accelerator.process_index},
-                torch_dtype=torch.bfloat16,
-            ).to(device)
-            
-        elif(lang_model == "meta-llama/CodeLlama-7b-hf"):
-            tokenizer = CodeLlamaTokenizer.from_pretrained(lang_model)
-            model = LlamaForCausalLM.from_pretrained(lang_model).to(device)
-        elif(lang_model == "mistralai/Mistral-7B-v0.1"):
-            model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto").to(device)
-            
-            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-            tokenizer.pad_token = tokenizer.eos_token
-        else:
-            raise ValueError(f"Unsupported language model: {lang_model}")
-    """
+    
+    model, tokenizer, max_tokens = load_model(model_name, models[model_name])
+    model = accelerator.prepare(model)
 
-    # sync GPUs and start the timer
     accelerator.wait_for_everyone()
     start=time.time()
 
     # divide the prompt list onto the available GPUs 
-    model, tokenizer, max_tokens = load_model(model_name, models[model_name], device)
-    model = accelerator.prepare(model)
     with accelerator.split_between_processes(prompts_all) as prompts:
         # store output of generations in dict
         results=dict(outputs=[], num_tokens=0)
         
         #model = model.to(device)
         # have each GPU do inference, prompt by prompt
-        for prompt in tqdm(prompts, desc="Processing SQL prompts"):
+        for prompt in tqdm(prompts, desc="Processing prompts"):
             
             
-            result = generate_text(model, tokenizer, max_tokens, prompt, device)
+            result = generate_text(model, tokenizer, max_tokens, prompt)
             #generated_text = generated_text.split('#')[0]
 
             results["outputs"].append(result)
