@@ -122,7 +122,6 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=0, help="Limit for test data")
     args = parser.parse_args()
 
-    # Load your data here (replace with your actual data loading code)
     dataset_name = 'liupf/ChEBI-20-MM'
 
     dataset = load_dataset(dataset_name)
@@ -140,6 +139,3 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_graphs, batch_size=16, shuffle=False)
 
     train(train_loader, val_loader, train_graphs)
-    # You can add more code here to use the trained model, e.g.:
-    # test_results = icl.get_samples(0, 5)
-    # print(test_results)
