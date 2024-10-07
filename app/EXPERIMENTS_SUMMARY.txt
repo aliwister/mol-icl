@@ -43,3 +43,7 @@
 /home/ali.lawati/mol-incontext/output/mmcl-random-chebi-5-epochs300-loop.mistral-7B.csv, tokens/sec: 565.0, time 2038.960288286209, total tokens 1153950, total prompts 3297
 /home/ali.lawati/mol-incontext/output/mmcl_attr-chebi-1-epochs300-no-airl.mistral-7B.csv, tokens/sec: 52.0, time 671.1667549610138, total tokens 35000, total prompts 100
 /home/ali.lawati/mol-incontext/output/mmcl_attr-chebi-1-epochs300-airl.mistral-7B.csv, tokens/sec: 58.0, time 601.2672929763794, total tokens 35000, total prompts 100
+/home/ali.lawati/mol-incontext/output/mmcl_attr-chebi-2-epochs300-new.mistral-7B.csv, tokens/sec: 268.0, time 1304.4599471092224, total tokens 350000, total prompts 1000
+/home/ali.lawati/mol-incontext/output/mmcl_attr-chebi-1-epochs300-new.mistral-7B.csv, tokens/sec: 336.0, time 1040.5542562007904, total tokens 350000, total prompts 1000
+/home/ali.lawati/mol-incontext/output/mmcl_attr-chebi-1-epochs300-new-test.mistral-7B.csv, tokens/sec: 335.0, time 1042.2795650959015, total tokens 350000, total prompts 1000
+/home/ali.lawati/mol-incontext/output/mmcl_attr-chebi-2-epochs300-new-test.mistral-7B.csv, tokens/sec: 269.0, time 1297.491985321045, total tokens 350000, total prompts 1000

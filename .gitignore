@@ -25,3 +25,7 @@ data
 data/** 
 Equal-Size-Spectral-Clustering/
 Equal-Size-Spectral-Clustering/**
+4GPU_Small_Param_LLM_Summarizations_script.py
+env
+*.zip
+__MACOSX/

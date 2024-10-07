@@ -22,7 +22,7 @@ def preprocess_each_sentence(sentence, tokenizer, max_seq_len):
 
 
 # Function to batch the text inputs and get outputs from the model
-def get_batched_text_outputs(device, descriptions, text_tokenizer, text_model, max_seq_len, file_type, batch_size=16, is_load_saved=False, is_save=False):
+def get_batched_text_outputs(device, descriptions, text_tokenizer, text_model, max_seq_len, file_type="none", batch_size=16, is_load_saved=False, is_save=False):
     # Prepare the token IDs and attention masks using the provided tokenizer
     if (is_load_saved):
         file_path = f"/home/ali.lawati/mol-incontext/input/scibert/{file_type}.npy"
