@@ -1,4 +1,4 @@
-# Semantic Captioning
+# GAMIC
 GAMIC: Graph-Aligned Molecular In-context Learning for Molecule Analysis via LLMs
 
 ## Train the model
