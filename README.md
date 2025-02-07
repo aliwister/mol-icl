@@ -1,5 +1,4 @@
-# GAMIC
-GAMIC: Graph-Aligned Molecular In-context Learning for Molecule Analysis via LLMs
+# Graph-based Molecular In-context Learning Grounded on Morgan Fingerprints
 
 ## Train the model
 ```
@@ -22,3 +21,6 @@ Results will be logged in `EXPERIMENTS.txt` (for molecule captioning) or `EXPERI
 
 ![Model](assets/teaser.png)
 
+
+For a copy of the preprint: 
+![Model](assets/paper.pdf)
