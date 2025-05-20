@@ -4,7 +4,8 @@ import time, os
 from argparse import ArgumentParser
 from model.gae import GAE
 from model.mmcl import MMCL
-from util.util import create_incontext_prompt, create_incontext_prompt2, get_random_samples, get_samples_new, create_input_file, smiles2graph, get_scaffold_samples, generate_scaffolds, get_samples_top
+#from test_kvplm import generate_kvplm
+from util.util import create_incontext_prompt, create_incontext_prompt2, get_random_samples, get_samples_new, create_input_file, smiles2graph, get_scaffold_samples, generate_scaffolds, get_samples_top#, get_kvplm_samples
 from util.dataset import PubChemDataset
 from torch_geometric.data import Batch
 
@@ -44,6 +45,9 @@ def assemble(method, dataset, checkpoint, random_state = 42):
     if(method == "scaffold"):
         sc_train_pool = generate_scaffolds(df_train, label_source)
         sc_test_pool = generate_scaffolds(df_test, label_source)
+    #elif(method == "kvplm"):
+    #    sc_train_pool = generate_kvplm(df_train, label_source)
+    #    sc_test_pool = generate_kvplm(df_test, label_source)
     elif(method != "random"):
         if method == "mmcl":
             model = MMCL(9, 128, 768, 9)
@@ -56,8 +60,8 @@ def assemble(method, dataset, checkpoint, random_state = 42):
         with torch.no_grad():
             train_batch = Batch.from_data_list(train_graphs).to(device)
             test_batch  = Batch.from_data_list(test_graphs).to(device)
-            _, _, train_pool = model(train_batch.x, train_batch.edge_index, train_batch.batch, train_batch.edge_attr)
-            _, _, test_pool  = model(test_batch.x, test_batch.edge_index, test_batch.batch, test_batch.edge_attr)
+            train_pool = model(train_batch.x, train_batch.edge_index, train_batch.batch, train_batch.edge_attr)
+            test_pool  = model(test_batch.x, test_batch.edge_index, test_batch.batch, test_batch.edge_attr)
                 
     LEN = 10
     refs = []
@@ -77,6 +81,8 @@ def assemble(method, dataset, checkpoint, random_state = 42):
                     samples = get_random_samples(df_train, n+1, label_source, label_target)
                 elif(method == "scaffold"):
                     samples = get_scaffold_samples(sc_test_pool[i], df_train, sc_train_pool, n+1, label_source, label_target)
+                #elif(method == "kvplm"):
+                #    samples = get_kvplm_samples(sc_test_pool[i], df_train, sc_train_pool, n+1, label_source, label_target)
                 elif(method == "mmcl_top"):
                     samples = get_samples_top(test_pool[i], df_train, train_pool, n+1, label_source, label_target)
                 else: 
@@ -101,3 +107,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     assemble(args.method, args.dataset, args.checkpoint)
+    
+    #datasets = ["chebi-20"] #, "pubchem"]
+    #methods = ['mmcl']#'mmcl']
+    #checkpoints = [
+    #    './checkpoints/mmcl-morgan-exp1-301-chebi-biobert-768-morgan=True.pt',
+    #    './checkpoints/mmcl-morgan-exp1-301-chebi-pubmedbert-768-morgan=True.pt',
+    #]
+    #for c in checkpoints:
+    #    for dataset in datasets:
+    #        for m in methods:
+    #            assemble(m, dataset, c)
